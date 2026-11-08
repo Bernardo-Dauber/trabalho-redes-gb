@@ -311,3 +311,82 @@ Shared: video and README (each writes their own section).
 - **Language:** README, slides and video in **Portuguese** (course language); code and identifiers in English; planning docs (`docs/`, `CONTEXT.md`) may stay in English.
 
 **Why:** An early integration point (12/11) surfaces interface mismatches with a week to spare; freezing results on 16/11 leaves three days for the part the grade weighs most — interpretation and presentation.
+
+## D20 — Schemes are chosen by name; the scheme table is private to each module
+
+**Decision:** `line_codes` and `modulation` expose functions that take the scheme name as a parameter — `encode(bits, "manchester")`, `decode(chips, "manchester")`, `chips_per_bit("manchester")`, `modulate(chips, "16qam")`, `demodulate(symbols, "16qam")`, `chips_per_symbol("16qam")` — plus a `NAMES` tuple to iterate over. The name → implementation table lives inside each module. Unknown name ⇒ `KeyError`. (Replaces the `LINE_CODES`/`CHIPS_PER_BIT` dictionaries drafted in D18; `docs/interface.md` updated.)
+
+**Why:**
+- D18's draft had two dictionaries describing the same schemes (`LINE_CODES` and `CHIPS_PER_BIT`) — add a scheme to one, forget the other, and they silently disagree. One private table cannot drift.
+- Smallest surface for every caller: `link.py` reads like the pipeline (encode → modulate → transmit → demodulate → decode), the sweep just loops over `NAMES`, and the name strings are exactly the CSV values — no translation step.
+
+**Rejected:**
+- *A record per scheme* (`LineCode(name, chips_per_bit, encode, decode)`) — also drift-free, but every caller must learn the record's shape and unpack it.
+- *Separate dictionaries as drafted in D18* — drift risk.
+
+## D21 — One generic modulator over three constellation tables
+
+**Decision:** `modulation.py` has a single implementation driven by a private table of constellations (`bpsk`: 2 points, `qpsk`: 4, `16qam`: 16). Index *i* in a table is the point whose chip label is *i* read as binary, with Gray order baked into the table and scaling to unit average energy applied when the table is built.
+- modulate: chips → groups of `chips_per_symbol` → index → table[index]
+- demodulate: nearest point (argmin |symbol − point| over the table) → index → chips
+
+A public `constellation(mod)` returns the ideal points, so the constellation scatter plots (D13) mark them from the same table.
+
+**Why:**
+- The three modulations differ *only* in their table; one implementation (~25 lines) means one place for bugs. A new modulation (8-PSK, 64-QAM) would be just a new table.
+- Gray mapping and unit energy (D9) are checked by one test looping over all tables (neighbours differ in 1 chip; mean |point|² = 1).
+- Cost of brute-force nearest point: ≤ 100k × 16 distances — milliseconds in NumPy.
+
+**Rejected:**
+- *Three hand-written pairs* (sign of real part; signs of real/imag; per-axis thresholds for 16-QAM) — textbook and slightly faster, but three implementations each with their own Gray/energy logic and tests, for no measurable gain.
+
+## D22 — Parameters are constants where they are used; every sweep writes a run snapshot
+
+**Decision:**
+- Burst constants stay in `channel.py` (D14); the Eb/N0 grid and seeds are constants at the top of `run_sweep.py`.
+- `run_sweep.py` writes `results/raw.csv` **and** `results/run_info.json`: grid, seeds, burst constants (read from `channel.py`, never copied by hand), message bits per run, **git commit hash + dirty flag**, timestamp. Library versions are pinned by `uv.lock`.
+- Both files are committed to git.
+
+**Why:**
+- Covers "registrar configurações, variações, número de bits, resultados brutos" and rubric item 6 (reproducibility).
+- The commit hash ties every plot to the exact code that produced it; the dirty flag exposes plots made from uncommitted code before results are frozen (16/11, D19).
+
+**Rejected:**
+- *Config file (TOML/YAML) + CLI flags* — a parser and a second source of truth for an experiment that has exactly one configuration.
+- *Only the CSV* — loses the burst constants and the code version, exactly what is needed to reproduce the burst curves.
+
+## D23 — Sequential sweep; `run_link` creates the generator from the seed
+
+**Decision:** `run_sweep.py` is a plain nested loop (scenario × line code × modulation × Eb/N0 × seed) calling `run_link(..., seed)`, printing one progress line per combination. Inside, `rng = np.random.default_rng(seed)` is created and passed to `transmit()` (D18). No parallelism unless a real run proves slow.
+
+**Why:**
+- 990 runs × tens of ms each ≈ under a minute — parallelism buys nothing.
+- Keeps common random numbers (D18): the same seed gives the same noise source to every combination ⇒ lower variance in comparisons. Side effect to state on the slide: for a given seed, burst positions are identical across Eb/N0 values, so neighbouring Eb/N0 points are correlated (smoother curves); the 5 seeds remain different from each other.
+
+**Rejected:**
+- *multiprocessing* — 4–8× faster on something already under a minute, plus Windows process-startup quirks.
+- *Independent streams per combination (`SeedSequence.spawn`)* — statistically purer, but discards the variance reduction: noisier comparisons for the same number of bits.
+
+## D24 — Tests go through the contract only; each owner tests their modules
+
+**Decision:** Tests call only the functions in `docs/interface.md`, never internals.
+
+| Module | Tests (owner) |
+|---|---|
+| `source` | text → bits → text round trip; `"A"` → `01000001`; non-printable byte → `?` (P1) |
+| `line_codes` | round trip for every name in `NAMES`; known vectors (Manchester `0`→`01`); injected `00`/`11` counted as violations; **inverting every chip still decodes correctly for Differential Manchester** (P1) |
+| `modulation` | round trip for every name; Gray (nearest neighbours differ in 1 chip); unit average energy (P1) |
+| `channel` | measured noise variance ≈ N0; fraction of time in bad state ≈ 1%; mean burst length ≈ 20; same seed ⇒ same output (P2) |
+| `link` | noiseless, all 9 combinations recover the text exactly (D12) |
+| theory | NRZ-BPSK BER at a few Eb/N0 values agrees with Q(√(2·Eb/N0)) within the confidence interval (P2) |
+
+"Noiseless" needs no special mode: `ebn0_db = math.inf` ⇒ N0 = 0, and the AWGN channel adds nothing (added to the contract).
+
+**Why:**
+- Testing through the contract lets implementations change without breaking tests.
+- Per-module tests localise failures — essential when two people integrate on 12/11 (D19).
+- The Differential Manchester inversion test turns a slide claim (D1: immune to 180° inversion) into evidence; the theory test automates the independent check of D13.
+
+**Rejected:**
+- *Only the noiseless end-to-end test* — when it fails, nobody knows which of 5 modules broke.
+- *GitHub Actions CI on every push* — cheap (~15 lines of YAML) and would help repo quality, but not chosen for now; easy to add later if integration pain appears.
