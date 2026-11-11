@@ -1,75 +1,76 @@
-# Digital transmission simulator
+# Simulador de transmissão digital
 
-A simulator of a digital communication link — from an ASCII message to the recovered message — used to measure how line coding, modulation and channel noise affect bit error rate and spectral efficiency.
+Um simulador de um enlace de comunicação digital — da mensagem ASCII até a mensagem recuperada — usado para medir como a codificação de linha, a modulação e o ruído do canal afetam a taxa de erro de bits e a eficiência espectral.
 
-## Language
+Cada termo traz entre parênteses o nome em inglês usado no código.
 
-**Message bit**:
-A bit of the original ASCII message, before any line coding. BER is always measured on message bits.
-_Avoid_: data bit, info bit (when ambiguous)
+## Linguagem
 
-**Line code**:
-A rule that turns message bits into chips to shape the signal (transitions, polarity), not to correct errors. Our line codes are NRZ, Manchester and Differential Manchester.
-_Avoid_: channel coding, encoding (ambiguous with error-correction coding)
+**Bit da mensagem** (*message bit*):
+Um bit da mensagem ASCII original, antes de qualquer codificação de linha. A BER é sempre medida sobre os bits da mensagem.
+_Evitar_: bit de dados, bit de informação (quando ambíguo)
 
-**Chip**:
-A binary output of the line code; the unit fed to the modulator. With NRZ one message bit is one chip; with Manchester and Differential Manchester one message bit is two chips.
-_Avoid_: coded bit, sub-bit
+**Codificação de linha** (*line code*):
+Uma regra que transforma bits da mensagem em chips para moldar o sinal (transições, polaridade), não para corrigir erros. Nossas codificações de linha são NRZ, Manchester e Manchester Diferencial.
+_Evitar_: codificação de canal, "codificação" sozinha (ambígua com codificação de correção de erros)
 
-**Modulation**:
-The mapping of groups of chips onto complex symbols (BPSK, QPSK, 16-QAM).
-_Avoid_: line coding
+**Chip** (*chip*):
+Uma saída binária da codificação de linha; a unidade que alimenta o modulador. Com NRZ, um bit da mensagem é um chip; com Manchester e Manchester Diferencial, um bit da mensagem são dois chips.
+_Evitar_: bit codificado, sub-bit
 
-**Symbol**:
-One point of a modulation's constellation; carries 1 (BPSK), 2 (QPSK) or 4 (16-QAM) chips.
+**Modulação** (*modulation*):
+O mapeamento de grupos de chips em símbolos complexos (BPSK, QPSK, 16-QAM).
+_Evitar_: codificação de linha
 
-**Eb/N0**:
-Energy per message bit over noise power spectral density, in dB; the single x-axis of every BER curve. When the assignment says "SNR", we mean this.
-_Avoid_: SNR (unqualified), Es/N0, chip SNR
+**Símbolo** (*symbol*):
+Um ponto da constelação de uma modulação; carrega 1 (BPSK), 2 (QPSK) ou 4 (16-QAM) chips.
 
-**Violation**:
-A received chip pair that no message bit can produce under Manchester or Differential Manchester (`00` or `11`); a detected error. It is still decoded to a bit by a fixed rule.
-_Avoid_: invalid symbol, decoding error
+**Eb/N0** (*Eb/N0*):
+Energia por bit da mensagem sobre a densidade espectral de potência do ruído, em dB; o único eixo x de toda curva de BER. Quando o enunciado diz "SNR", queremos dizer isto.
+_Evitar_: SNR (sem qualificação), Es/N0, SNR por chip
 
-## Channel
+**Violação** (*violation*):
+Um par de chips recebido que nenhum bit da mensagem pode produzir em Manchester ou Manchester Diferencial (`00` ou `11`); um erro detectado. Ainda assim ele é decodificado para um bit por uma regra fixa.
+_Evitar_: símbolo inválido, erro de decodificação
 
-**Channel scenario**:
-One of the two noise models a transmission passes through: the AWGN channel or the burst channel.
-_Avoid_: channel type, noise mode
+## Canal
 
-**AWGN channel**:
-The baseline channel scenario: independent Gaussian noise on every symbol, set by Eb/N0.
+**Cenário de canal** (*channel scenario*):
+Um dos dois modelos de ruído pelos quais uma transmissão passa: o canal AWGN ou o canal com rajadas.
+_Evitar_: tipo de canal, modo de ruído
 
-**Burst channel**:
-The second channel scenario: the AWGN channel plus a burst process that, while in the bad state, adds much stronger noise.
-_Avoid_: fading channel, degraded channel
+**Canal AWGN** (*AWGN channel*):
+O cenário de canal de referência: ruído gaussiano independente em cada símbolo, definido por Eb/N0.
 
-**Bad state**:
-The burst channel's condition in which extra noise, at a fixed level independent of Eb/N0, is added on top of the background noise. Its opposite is the good state (background noise only).
-_Avoid_: error state, noisy mode
+**Canal com rajadas** (*burst channel*):
+O segundo cenário de canal: o canal AWGN mais um processo de rajadas que, enquanto está no estado ruim, adiciona ruído muito mais forte.
+_Evitar_: canal com desvanecimento, canal degradado
 
-**Burst**:
-A contiguous run of symbols during which the burst channel is in the bad state.
-_Avoid_: rajada (in code/docs; fine in the presentation)
+**Estado ruim** (*bad state*):
+A condição do canal com rajadas em que ruído extra, em um nível fixo independente de Eb/N0, é somado ao ruído de fundo. O oposto é o estado bom (*good state*: só ruído de fundo).
+_Evitar_: estado de erro, modo ruidoso
 
-## Source
+**Rajada** (*burst*):
+Uma sequência contígua de símbolos durante a qual o canal com rajadas está no estado ruim.
 
-**Source text**:
-The single long public-domain Portuguese text, transliterated to 7-bit ASCII, that every transmission sends; the origin of all message bits (8 per character).
-_Avoid_: payload, input data, random bits
+## Fonte
 
-## Modulation
+**Texto-fonte** (*source text*):
+O único texto longo em português, de domínio público, transliterado para ASCII de 7 bits, que toda transmissão envia; a origem de todos os bits da mensagem (8 por caractere).
+_Evitar_: payload, dados de entrada, bits aleatórios
 
-**Constellation**:
-The set of complex points a modulation can send, Gray-labelled and scaled to unit average energy.
-_Avoid_: symbol map, alphabet
+## Modulação
 
-## Metrics
+**Constelação** (*constellation*):
+O conjunto de pontos complexos que uma modulação pode enviar, rotulados em código Gray e escalados para energia média unitária.
+_Evitar_: mapa de símbolos, alfabeto
 
-**BER**:
-Fraction of message bits recovered wrong, after line decoding.
-_Avoid_: chip error rate, symbol error rate (different quantities)
+## Métricas
 
-**Spectral efficiency**:
-The nominal message bits per second per hertz a line code × modulation combination delivers, assuming ideal Nyquist pulses.
-_Avoid_: throughput, bandwidth efficiency, data rate
+**BER** (*BER*):
+Fração dos bits da mensagem recuperados errados, após a decodificação de linha.
+_Evitar_: taxa de erro de chip, taxa de erro de símbolo (são grandezas diferentes)
+
+**Eficiência espectral** (*spectral efficiency*):
+Os bits da mensagem por segundo por hertz nominais que uma combinação codificação de linha × modulação entrega, assumindo pulsos de Nyquist ideais.
+_Evitar_: vazão (throughput), eficiência de banda, taxa de dados
